@@ -1,6 +1,7 @@
 #!/bin/bash
 # 냥모니터 빌드: ./build.sh        -> build/NyangMonitor.app
 #               ./build.sh install -> /Applications 에 복사하고 실행
+#               ./build.sh release -> dist/NyangMonitor.zip (깃허브 릴리스용)
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -12,10 +13,15 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
 echo "컴파일 중..."
-swiftc -swift-version 5 -O \
-  -target arm64-apple-macos13.0 -sdk "$SDK" \
-  Sources/*.swift -o "$BIN" \
-  -framework AppKit -framework SwiftUI -framework ServiceManagement
+# 애플 실리콘(arm64) + 인텔(x86_64) 둘 다 되는 유니버설 앱
+for ARCH in arm64 x86_64; do
+  swiftc -swift-version 5 -O \
+    -target $ARCH-apple-macos13.0 -sdk "$SDK" \
+    Sources/*.swift -o "build/NyangMonitor-$ARCH" \
+    -framework AppKit -framework SwiftUI -framework ServiceManagement
+done
+lipo -create build/NyangMonitor-arm64 build/NyangMonitor-x86_64 -output "$BIN"
+rm -f build/NyangMonitor-arm64 build/NyangMonitor-x86_64
 
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -28,10 +34,11 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
   <key>CFBundleExecutable</key><string>NyangMonitor</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>1.0</string>
+  <key>CFBundleShortVersionString</key><string>1.0.0</string>
   <key>CFBundleVersion</key><string>1</string>
   <key>LSMinimumSystemVersion</key><string>13.0</string>
   <key>LSUIElement</key><true/>
+  <key>NSHumanReadableCopyright</key><string>MIT License</string>
   <key>NSHighResolutionCapable</key><true/>
 </dict>
 </plist>
@@ -61,4 +68,11 @@ if [[ "${1:-}" == "install" ]]; then
   cp -R "$APP" /Applications/
   open /Applications/NyangMonitor.app
   echo "설치하고 실행했어요: /Applications/NyangMonitor.app"
+fi
+
+if [[ "${1:-}" == "release" ]]; then
+  mkdir -p dist
+  rm -f dist/NyangMonitor.zip
+  ditto -c -k --sequesterRsrc --keepParent "$APP" dist/NyangMonitor.zip
+  echo "배포용 zip: dist/NyangMonitor.zip"
 fi
